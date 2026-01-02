@@ -1,0 +1,16 @@
+screener:
+  criteria:
+    market_cap_min: 1000000000  # $1B minimum
+    pe_max: 25
+    current_ratio_min: 1.5
+    debt_to_equity_max: 1.0
+    revenue_growth_min: 0.05  # 5% minimum
+    positive_earnings: true
+    roe_min: 0.15  # 15% minimum
+  default_tickers:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - META
+
