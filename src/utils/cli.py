@@ -30,6 +30,16 @@ def cli():
 
 
 @cli.command()
+@click.option('--host', default='127.0.0.1', show_default=True, help='Host to bind the web app')
+@click.option('--port', default=5000, show_default=True, help='Port to bind the web app')
+@click.option('--debug', is_flag=True, help='Run web app in debug mode')
+def web(host: str, port: int, debug: bool):
+    """Run the Thesis Lab web UI."""
+    from ..web.app import run as run_web
+    run_web(host=host, port=port, debug=debug)
+
+
+@cli.command()
 @click.option(
     '--tickers',
     '-t',

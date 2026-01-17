@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Thesis Lab</title>
+    <style>
+      :root {
+        --bg: #f7f4ee;
+        --ink: #1b1b1b;
+        --muted: #6b6b6b;
+        --accent: #d64b2a;
+        --accent-2: #1155cc;
+        --card: #ffffff;
+        --stroke: #e6e1d7;
+        --shadow: 0 16px 40px rgba(27, 27, 27, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at top, #fff4d2 0%, #f7f4ee 45%, #efe6da 100%);
+        color: var(--ink);
+      }
+
+      header {
+        padding: 40px 8vw 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      header h1 {
+        font-size: clamp(2.4rem, 3vw, 3.4rem);
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+
+      header p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 720px;
+      }
+
+      main {
+        padding: 0 8vw 80px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 32px;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+
+      button {
+        border: none;
+        background: var(--ink);
+        color: white;
+        padding: 12px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.2s ease;
+      }
+
+      button.secondary {
+        background: white;
+        color: var(--ink);
+        border: 1px solid var(--stroke);
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 20px;
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: 20px;
+        padding: 20px;
+        border: 1px solid var(--stroke);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 220px;
+        box-shadow: 0 12px 24px rgba(27, 27, 27, 0.06);
+      }
+
+      .card h3 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+
+      .card .meta {
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .card .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tag {
+        background: #f2efe7;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+      }
+
+      .card-actions {
+        margin-top: auto;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .panel {
+        background: white;
+        border-radius: 20px;
+        border: 1px solid var(--stroke);
+        padding: 24px;
+        box-shadow: var(--shadow);
+      }
+
+      .panel h2 {
+        margin-top: 0;
+      }
+
+      form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
+      input, textarea {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--stroke);
+        font-family: inherit;
+        font-size: 0.95rem;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .results {
+        margin-top: 24px;
+        overflow-x: auto;
+        border-radius: 16px;
+        border: 1px solid var(--stroke);
+        background: white;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 680px;
+      }
+
+      th, td {
+        padding: 12px;
+        border-bottom: 1px solid var(--stroke);
+        text-align: left;
+        font-size: 0.85rem;
+      }
+
+      th {
+        background: #1b1b1b;
+        color: white;
+        position: sticky;
+        top: 0;
+      }
+
+      .analysis {
+        background: #fff0c2;
+        border-radius: 16px;
+        padding: 16px;
+        margin-top: 16px;
+      }
+
+      .empty {
+        text-align: center;
+        color: var(--muted);
+        padding: 40px;
+        border: 2px dashed var(--stroke);
+        border-radius: 18px;
+      }
+
+      @media (max-width: 760px) {
+        header {
+          padding: 28px 6vw 16px;
+        }
+
+        main {
+          padding: 0 6vw 60px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Thesis Lab</h1>
+      <p>Build multiple investment environments, attach a narrative thesis, and screen tickers into reports.</p>
+      <div class="toolbar">
+        <button id="newEnvBtn">New Environment</button>
+        <button class="secondary" id="refreshBtn">Refresh</button>
+      </div>
+    </header>
+    <main>
+      <section>
+        <div id="envGrid" class="grid"></div>
+      </section>
+      <section class="panel">
+        <h2 id="formTitle">Create Environment</h2>
+        <form id="envForm">
+          <label>
+            Name
+            <input type="text" id="envName" placeholder="Venezuela oil thesis" required>
+          </label>
+          <label>
+            Tickers (comma or newline)
+            <textarea id="envTickers" placeholder="PDVSA, VLO, CVX"></textarea>
+          </label>
+          <label>
+            Criteria (inline)
+            <input type="text" id="envCriteria" placeholder="pe_max=18,roe_min=0.12">
+          </label>
+          <label style="grid-column: 1 / -1;">
+            Thesis narrative
+            <textarea id="envThesis" placeholder="Describe the macro thesis, key catalysts, and risk framing."></textarea>
+          </label>
+        </form>
+        <div class="toolbar" style="margin-top: 16px;">
+          <button id="saveEnvBtn">Save Environment</button>
+          <button class="secondary" id="resetFormBtn">Reset</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Latest Run</h2>
+        <div id="latestSummary" class="analysis">Run an environment to see results.</div>
+        <div id="latestResults" class="results"></div>
+      </section>
+    </main>
+    <script>
+      const envGrid = document.getElementById("envGrid");
+      const envForm = document.getElementById("envForm");
+      const envName = document.getElementById("envName");
+      const envTickers = document.getElementById("envTickers");
+      const envCriteria = document.getElementById("envCriteria");
+      const envThesis = document.getElementById("envThesis");
+      const formTitle = document.getElementById("formTitle");
+      const latestSummary = document.getElementById("latestSummary");
+      const latestResults = document.getElementById("latestResults");
+
+      let editingId = null;
+
+      async function fetchEnvironments() {
+        const res = await fetch("/api/environments");
+        return res.json();
+      }
+
+      function renderEnvironments(envs) {
+        envGrid.innerHTML = "";
+        if (!envs.length) {
+          envGrid.innerHTML = `<div class="empty">No environments yet. Create your first thesis.</div>`;
+          return;
+        }
+
+        envs.forEach(env => {
+          const card = document.createElement("div");
+          card.className = "card";
+          const tickers = (env.tickers || []).slice(0, 6).join(", ");
+          const criteria = env.criteria ? Object.keys(env.criteria).join(", ") : "No criteria";
+          card.innerHTML = `
+            <h3>${env.name}</h3>
+            <div class="meta">${env.thesis || "No thesis narrative yet."}</div>
+            <div class="tags">
+              <span class="tag">${(env.tickers || []).length} tickers</span>
+              <span class="tag">${criteria}</span>
+            </div>
+            <div class="card-actions">
+              <button data-action="run">Run</button>
+              <button class="secondary" data-action="edit">Edit</button>
+              <button class="secondary" data-action="delete">Delete</button>
+            </div>
+          `;
+
+          card.querySelector('[data-action="run"]').addEventListener("click", () => runEnvironment(env.id));
+          card.querySelector('[data-action="edit"]').addEventListener("click", () => loadForEdit(env));
+          card.querySelector('[data-action="delete"]').addEventListener("click", () => deleteEnvironment(env.id));
+
+          envGrid.appendChild(card);
+        });
+      }
+
+      function resetForm() {
+        editingId = null;
+        formTitle.textContent = "Create Environment";
+        envForm.reset();
+      }
+
+      function loadForEdit(env) {
+        editingId = env.id;
+        formTitle.textContent = "Edit Environment";
+        envName.value = env.name || "";
+        envTickers.value = (env.tickers || []).join(", ");
+        envCriteria.value = env.criteria
+          ? Object.entries(env.criteria).map(([k, v]) => `${k}=${v}`).join(",")
+          : "";
+        envThesis.value = env.thesis || "";
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      }
+
+      async function saveEnvironment() {
+        const payload = {
+          name: envName.value,
+          tickers: envTickers.value,
+          criteria: envCriteria.value,
+          thesis: envThesis.value
+        };
+
+        const options = {
+          method: editingId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        };
+
+        const endpoint = editingId ? `/api/environments/${editingId}` : "/api/environments";
+        await fetch(endpoint, options);
+        resetForm();
+        refresh();
+      }
+
+      async function deleteEnvironment(envId) {
+        await fetch(`/api/environments/${envId}`, { method: "DELETE" });
+        refresh();
+      }
+
+      async function runEnvironment(envId) {
+        latestSummary.textContent = "Running screening...";
+        latestResults.innerHTML = "";
+        const res = await fetch(`/api/environments/${envId}/run`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          latestSummary.textContent = data.error || "Failed to run environment.";
+          return;
+        }
+
+        latestSummary.innerHTML = `
+          <strong>${data.environment.name}</strong><br>
+          ${data.summary.analysis}<br>
+          Reports: ${data.report_paths.html}
+        `;
+
+        if (data.results && data.results.length) {
+          const columns = Object.keys(data.results[0]);
+          const header = columns.map(col => `<th>${col}</th>`).join("");
+          const rows = data.results.map(row => {
+            const cells = columns.map(col => `<td>${row[col] ?? ""}</td>`).join("");
+            return `<tr>${cells}</tr>`;
+          }).join("");
+          latestResults.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+        } else {
+          latestResults.innerHTML = "";
+        }
+      }
+
+      async function refresh() {
+        const envs = await fetchEnvironments();
+        renderEnvironments(envs);
+      }
+
+      document.getElementById("newEnvBtn").addEventListener("click", resetForm);
+      document.getElementById("saveEnvBtn").addEventListener("click", saveEnvironment);
+      document.getElementById("resetFormBtn").addEventListener("click", resetForm);
+      document.getElementById("refreshBtn").addEventListener("click", refresh);
+
+      refresh();
+    </script>
+  </body>
+</html>
