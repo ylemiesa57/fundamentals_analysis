@@ -1,0 +1,4 @@
+# Sample tickers file for screening
+AAPL, MSFT, GOOGL
+AMZN
+META
