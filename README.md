@@ -13,6 +13,8 @@ A Python-based stock research automation bot for fundamental analysis. This tool
 - **CSV/JSON Export**: Export screening results to CSV or JSON for further analysis
 - **Local Cache**: Built-in cache to reduce API calls and speed up re-runs
 - **Ticker Files**: Load tickers from a text/CSV file
+- **Thesis Environments**: Manage multiple screening environments with a web UI
+- **Report Artifacts**: HTML/CSV/JSON reports saved to `outputs/reports`
 
 ## Installation
 
@@ -40,6 +42,11 @@ pip install -r requirements.txt
 Screen specific tickers with default criteria:
 ```bash
 python -m src screen --tickers AAPL,MSFT,GOOGL
+```
+
+Start the web UI:
+```bash
+python -m src web
 ```
 
 Screen with custom output file:
@@ -144,9 +151,13 @@ fundamentals_analysis/
 │   ├── data/
 │   │   ├── __init__.py
 │   │   └── fetcher.py       # yfinance data fetching utilities
-│   └── utils/
-│       ├── __init__.py
-│       └── cli.py           # CLI interface
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── cli.py           # CLI interface
+│   └── web/
+│       ├── app.py           # Flask web UI + API
+│       └── static/
+│           └── index.html   # Frontend
 ├── data/
 │   └── .gitkeep            # Placeholder for data files
 ├── outputs/
