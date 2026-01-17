@@ -7,7 +7,9 @@ as well as calculating financial ratios for analysis.
 
 import time
 import logging
+import pickle
 from typing import Dict, Optional, Any
+from pathlib import Path
 import yfinance as yf
 import pandas as pd
 
@@ -21,7 +23,13 @@ class DataFetcher:
     Handles API rate limiting, error recovery, and data validation.
     """
     
-    def __init__(self, delay_between_requests: float = 0.5):
+    def __init__(
+        self,
+        delay_between_requests: float = 0.5,
+        cache_dir: Optional[Path] = None,
+        cache_ttl_hours: float = 24.0,
+        use_cache: bool = True,
+    ):
         """
         Initialize the DataFetcher.
         
@@ -30,6 +38,43 @@ class DataFetcher:
         """
         self.delay_between_requests = delay_between_requests
         self._last_request_time = 0
+        self.cache_ttl_seconds = cache_ttl_hours * 3600
+        self.use_cache = use_cache
+        self.cache_dir = Path(cache_dir) if cache_dir else Path(__file__).parent.parent.parent / 'data' / 'cache'
+        if self.use_cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _cache_path(self, ticker: str) -> Path:
+        """Get cache file path for a ticker."""
+        safe_ticker = ticker.upper().replace('/', '_')
+        return self.cache_dir / f"{safe_ticker}.pkl"
+
+    def _load_cache(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Load cached data if it exists and is fresh."""
+        cache_path = self._cache_path(ticker)
+        if not cache_path.exists():
+            return None
+        try:
+            age_seconds = time.time() - cache_path.stat().st_mtime
+            if age_seconds > self.cache_ttl_seconds:
+                return None
+            with open(cache_path, 'rb') as f:
+                cached = pickle.load(f)
+            if isinstance(cached, dict):
+                cached['_cache_hit'] = True
+                return cached
+        except Exception as e:
+            logger.warning(f"Failed to read cache for {ticker}: {str(e)}")
+        return None
+
+    def _write_cache(self, ticker: str, data: Dict[str, Any]) -> None:
+        """Write fetched data to cache."""
+        cache_path = self._cache_path(ticker)
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+        except Exception as e:
+            logger.warning(f"Failed to write cache for {ticker}: {str(e)}")
     
     def _rate_limit(self):
         """Add delay between requests to avoid rate limiting."""
@@ -50,6 +95,11 @@ class DataFetcher:
         Returns:
             Dictionary containing financial data, or None if fetch fails
         """
+        if self.use_cache:
+            cached = self._load_cache(ticker)
+            if cached is not None:
+                return cached
+
         self._rate_limit()
         
         for attempt in range(retries):
@@ -94,6 +144,8 @@ class DataFetcher:
                     'info': info
                 }
                 
+                if self.use_cache:
+                    self._write_cache(ticker, financial_data)
                 return financial_data
                 
             except Exception as e:
@@ -189,7 +241,7 @@ class DataFetcher:
         if series.empty:
             return None
         
-        for key in possible_keys:
+        for key in possible_keys: # maybe try to narrow down the possible keys to a smaller list of keys that are most likely to be the correct key
             if key in series.index:
                 value = series[key]
                 # Handle different data types
@@ -201,4 +253,3 @@ class DataFetcher:
                     return None
         
         return None
-

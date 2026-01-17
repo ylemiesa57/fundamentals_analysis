@@ -23,14 +23,18 @@ class StockScreener:
     and checking against configured criteria.
     """
     
-    def __init__(self, criteria_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        criteria_config: Optional[Dict[str, Any]] = None,
+        fetcher: Optional[DataFetcher] = None,
+    ):
         """
         Initialize the screener with criteria configuration.
         
         Args:
             criteria_config: Dictionary of criteria values. If None, loads from default config.
         """
-        self.fetcher = DataFetcher()
+        self.fetcher = fetcher or DataFetcher()
         
         if criteria_config is None:
             criteria_config = load_criteria_from_config()
@@ -199,4 +203,3 @@ class StockScreener:
         logger.info(f"Filtered to {len(filtered)} passing stocks out of {len(df)} total")
         
         return filtered
-
