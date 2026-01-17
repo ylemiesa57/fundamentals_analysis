@@ -7,11 +7,12 @@ Provides CLI commands for screening stocks and generating reports.
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import click
 import pandas as pd
 
 from ..screener.screener import StockScreener
+from ..data.fetcher import DataFetcher
 from ..screener.criteria import load_criteria_from_config, parse_inline_criteria
 
 # Configure logging
@@ -35,6 +36,11 @@ def cli():
     help='Comma-separated list of ticker symbols (e.g., AAPL,MSFT,GOOGL)'
 )
 @click.option(
+    '--tickers-file',
+    type=click.Path(exists=True),
+    help='Path to a text/CSV file with tickers (one per line or comma-separated)'
+)
+@click.option(
     '--config',
     '-c',
     type=click.Path(exists=True),
@@ -47,6 +53,13 @@ def cli():
     help='Output CSV file path (default: outputs/screener_results.csv)'
 )
 @click.option(
+    '--format',
+    'output_format',
+    type=click.Choice(['csv', 'json'], case_sensitive=False),
+    default='csv',
+    help='Output format: csv or json (default: csv)'
+)
+@click.option(
     '--criteria',
     help='Inline criteria string (e.g., "pe_max=25,market_cap_min=1000000000")'
 )
@@ -55,8 +68,35 @@ def cli():
     is_flag=True,
     help='Only output stocks that passed all criteria'
 )
-def screen(tickers: Optional[str], config: Optional[str], output: str, 
-           criteria: Optional[str], filter_passed: bool):
+@click.option(
+    '--show',
+    is_flag=True,
+    help='Print results to stdout in a table format'
+)
+@click.option(
+    '--no-cache',
+    is_flag=True,
+    help='Disable local cache for fetched data'
+)
+@click.option(
+    '--cache-ttl-hours',
+    type=float,
+    default=24.0,
+    show_default=True,
+    help='Cache freshness window in hours'
+)
+def screen(
+    tickers: Optional[str],
+    tickers_file: Optional[str],
+    config: Optional[str],
+    output: str,
+    output_format: str,
+    criteria: Optional[str],
+    filter_passed: bool,
+    show: bool,
+    no_cache: bool,
+    cache_ttl_hours: float,
+):
     """
     Screen stocks against financial criteria.
     
@@ -79,9 +119,11 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
     python -m src.utils.cli screen --tickers AAPL,MSFT --filter-passed
     """
     # Determine tickers to screen
-    ticker_list = []
+    ticker_list: List[str] = []
     if tickers:
-        ticker_list = [t.strip().upper() for t in tickers.split(',')]
+        ticker_list = [t.strip().upper() for t in tickers.split(',') if t.strip()]
+    elif tickers_file:
+        ticker_list = _load_tickers_from_file(Path(tickers_file))
     elif config:
         # Try to load default tickers from config
         import yaml
@@ -95,7 +137,7 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
             click.echo("Error: Could not load default tickers from config. Please specify --tickers.", err=True)
             sys.exit(1)
     else:
-        click.echo("Error: Must specify either --tickers or --config", err=True)
+        click.echo("Error: Must specify --tickers, --tickers-file, or --config", err=True)
         sys.exit(1)
     
     if not ticker_list:
@@ -122,7 +164,11 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
     
     # Initialize screener
     try:
-        screener = StockScreener(criteria_config)
+        fetcher = DataFetcher(
+            cache_ttl_hours=cache_ttl_hours,
+            use_cache=not no_cache,
+        )
+        screener = StockScreener(criteria_config, fetcher=fetcher)
     except Exception as e:
         click.echo(f"Error initializing screener: {str(e)}", err=True)
         sys.exit(1)
@@ -146,9 +192,12 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Save to CSV
+    # Save to CSV/JSON
     try:
-        results_df.to_csv(output_path, index=False)
+        if output_format.lower() == 'json':
+            output_path.write_text(results_df.to_json(orient='records', indent=2))
+        else:
+            results_df.to_csv(output_path, index=False)
         click.echo(f"Results saved to {output_path}")
     except Exception as e:
         click.echo(f"Error saving results: {str(e)}", err=True)
@@ -159,6 +208,11 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
     click.echo("SCREENING SUMMARY")
     click.echo("="*60)
     
+    if show and len(results_df) > 0:
+        click.echo("\nResults preview:")
+        click.echo(results_df.to_string(index=False))
+        click.echo("")
+
     if len(results_df) > 0:
         passed = len(results_df[results_df['status'] == 'PASS']) if 'status' in results_df.columns else 0
         failed = len(results_df) - passed
@@ -181,3 +235,18 @@ def screen(tickers: Optional[str], config: Optional[str], output: str,
 if __name__ == '__main__':
     cli()
 
+
+def _load_tickers_from_file(path: Path) -> List[str]:
+    """Load tickers from a file (comma or newline separated)."""
+    content = path.read_text()
+    tickers: List[str] = []
+    for raw_line in content.splitlines():
+        line = raw_line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        parts = [p.strip() for p in line.split(',') if p.strip()]
+        tickers.extend(parts)
+    # Allow a single-line, comma-separated file without newlines
+    if not tickers and content.strip():
+        tickers = [t.strip() for t in content.split(',') if t.strip()]
+    return [t.upper() for t in tickers]

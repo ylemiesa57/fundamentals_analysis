@@ -10,7 +10,9 @@ A Python-based stock research automation bot for fundamental analysis. This tool
 - **Financial Data Fetching**: Automatically retrieve income statements, balance sheets, and key metrics
 - **Ratio Calculations**: Calculate key financial ratios (Current Ratio, Debt-to-Equity, ROE, Revenue Growth)
 - **CLI Interface**: Easy-to-use command-line interface for screening operations
-- **CSV Export**: Export screening results to CSV for further analysis
+- **CSV/JSON Export**: Export screening results to CSV or JSON for further analysis
+- **Local Cache**: Built-in cache to reduce API calls and speed up re-runs
+- **Ticker Files**: Load tickers from a text/CSV file
 
 ## Installation
 
@@ -45,6 +47,11 @@ Screen with custom output file:
 python -m src screen --tickers AAPL,MSFT --output outputs/my_results.csv
 ```
 
+Screen using a ticker file and JSON output:
+```bash
+python -m src screen --tickers-file data/tickers.txt --format json --output outputs/results.json
+```
+
 Use custom configuration file:
 ```bash
 python -m src screen --config config/config.yaml --tickers AAPL,MSFT
@@ -58,6 +65,17 @@ python -m src screen --tickers AAPL --criteria "pe_max=20,market_cap_min=1000000
 Filter to only show passing stocks:
 ```bash
 python -m src screen --tickers AAPL,MSFT,GOOGL --filter-passed
+```
+
+Print results to stdout:
+```bash
+python -m src screen --tickers AAPL,MSFT --show
+```
+
+Disable cache or adjust cache TTL:
+```bash
+python -m src screen --tickers AAPL --no-cache
+python -m src screen --tickers AAPL --cache-ttl-hours 6
 ```
 
 ## Configuration

@@ -6,9 +6,11 @@ Tests screening functionality, criteria evaluation, and error handling.
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
 import pandas as pd
 
 from src.screener.screener import StockScreener
+from src.utils.cli import _load_tickers_from_file
 from src.screener.criteria import (
     min_market_cap, max_pe_ratio, min_current_ratio,
     max_debt_to_equity, min_revenue_growth, positive_earnings, min_roe,
@@ -264,6 +266,19 @@ class TestStockScreener(unittest.TestCase):
         self.assertTrue(all(filtered['status'] == 'PASS'))
 
 
+class TestTickerFileParsing(unittest.TestCase):
+    """Test ticker file parsing utility."""
+
+    def test_load_tickers_from_file(self):
+        """Parse tickers from newline and comma separated input."""
+        import tempfile
+        content = "AAPL, msft\n# comment line\nGOOGL\nAMZN, META\n"
+        with tempfile.NamedTemporaryFile(mode='w+', delete=True) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            tickers = _load_tickers_from_file(Path(tmp.name))
+        self.assertEqual(tickers, ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META'])
+
+
 if __name__ == '__main__':
     unittest.main()
-
