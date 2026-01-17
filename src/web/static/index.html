@@ -169,6 +169,14 @@
         resize: vertical;
       }
 
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
       .results {
         margin-top: 24px;
         overflow-x: auto;
@@ -251,6 +259,10 @@
             Criteria (inline)
             <input type="text" id="envCriteria" placeholder="pe_max=18,roe_min=0.12">
           </label>
+          <label class="toggle">
+            <input type="checkbox" id="envDefaults" checked>
+            Use default criteria from config
+          </label>
           <label style="grid-column: 1 / -1;">
             Thesis narrative
             <textarea id="envThesis" placeholder="Describe the macro thesis, key catalysts, and risk framing."></textarea>
@@ -264,6 +276,9 @@
       <section class="panel">
         <h2>Latest Run</h2>
         <div id="latestSummary" class="analysis">Run an environment to see results.</div>
+        <div class="toolbar" style="margin-top: 12px;">
+          <button class="secondary" id="aiSummaryBtn" disabled>Request AI Summary</button>
+        </div>
         <div id="latestResults" class="results"></div>
       </section>
     </main>
@@ -279,6 +294,7 @@
       const latestResults = document.getElementById("latestResults");
 
       let editingId = null;
+      let lastRunEnvId = null;
 
       async function fetchEnvironments() {
         const res = await fetch("/api/environments");
@@ -297,12 +313,15 @@
           card.className = "card";
           const tickers = (env.tickers || []).slice(0, 6).join(", ");
           const criteria = env.criteria ? Object.keys(env.criteria).join(", ") : "No criteria";
+          const criteriaLabel = env.use_default_criteria === false
+            ? `Custom only: ${criteria}`
+            : `Defaults + ${criteria}`;
           card.innerHTML = `
             <h3>${env.name}</h3>
             <div class="meta">${env.thesis || "No thesis narrative yet."}</div>
             <div class="tags">
               <span class="tag">${(env.tickers || []).length} tickers</span>
-              <span class="tag">${criteria}</span>
+              <span class="tag">${criteriaLabel}</span>
             </div>
             <div class="card-actions">
               <button data-action="run">Run</button>
@@ -334,6 +353,7 @@
           ? Object.entries(env.criteria).map(([k, v]) => `${k}=${v}`).join(",")
           : "";
         envThesis.value = env.thesis || "";
+        document.getElementById("envDefaults").checked = env.use_default_criteria !== false;
         window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
       }
 
@@ -342,7 +362,8 @@
           name: envName.value,
           tickers: envTickers.value,
           criteria: envCriteria.value,
-          thesis: envThesis.value
+          thesis: envThesis.value,
+          use_default_criteria: document.getElementById("envDefaults").checked
         };
 
         const options = {
@@ -365,30 +386,83 @@
       async function runEnvironment(envId) {
         latestSummary.textContent = "Running screening...";
         latestResults.innerHTML = "";
-        const res = await fetch(`/api/environments/${envId}/run`, { method: "POST" });
-        const data = await res.json();
+        document.getElementById("aiSummaryBtn").disabled = true;
+        let res;
+        let data;
+        try {
+          res = await fetch(`/api/environments/${envId}/run`, { method: "POST" });
+          const raw = await res.text();
+          try {
+            data = JSON.parse(raw);
+          } catch (parseError) {
+            latestSummary.textContent = "Failed to parse response from server.";
+            latestResults.innerHTML = `<pre>${raw}</pre>`;
+            return;
+          }
+        } catch (err) {
+          latestSummary.textContent = "Network error while running environment.";
+          return;
+        }
         if (!res.ok) {
           latestSummary.textContent = data.error || "Failed to run environment.";
           return;
         }
 
+        const summaryBits = [
+          `${data.summary.passed} passed`,
+          `${data.summary.failed} failed`,
+          `${data.summary.criteria_count} criteria`
+        ];
+
+        const warningHtml = (data.summary.warnings || []).length
+          ? `<div style="margin-top:8px;color:#8b2b1f;">Warnings: ${(data.summary.warnings || []).join(" | ")}</div>`
+          : "";
+        const failedFetchHtml = (data.summary.failed_fetch || []).length
+          ? `<div style="margin-top:8px;color:#8b2b1f;">Missing data: ${(data.summary.failed_fetch || []).join(", ")}</div>`
+          : "";
         latestSummary.innerHTML = `
           <strong>${data.environment.name}</strong><br>
-          ${data.summary.analysis}<br>
-          Reports: ${data.report_paths.html}
+          <div style="margin-top:6px;">Run complete · ${summaryBits.join(" · ")}</div>
+          <div style="margin-top:8px;">${data.summary.analysis}</div>
+          <div style="margin-top:6px;">Reports: ${data.report_paths.html}</div>
+          ${warningHtml}
+          ${failedFetchHtml}
         `;
+        lastRunEnvId = data.environment.id;
+        document.getElementById("aiSummaryBtn").disabled = false;
 
         if (data.results && data.results.length) {
-          const columns = Object.keys(data.results[0]);
+          const baseColumns = Object.keys(data.results[0]);
+          const columns = ["status", "ticker", "company_name", ...baseColumns.filter(col => !["status", "ticker", "company_name"].includes(col))];
           const header = columns.map(col => `<th>${col}</th>`).join("");
           const rows = data.results.map(row => {
             const cells = columns.map(col => `<td>${row[col] ?? ""}</td>`).join("");
-            return `<tr>${cells}</tr>`;
+            const rowClass = row.status === "FAIL" ? " style=\"background:#fff7f0;\"" : "";
+            return `<tr${rowClass}>${cells}</tr>`;
           }).join("");
           latestResults.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
         } else {
-          latestResults.innerHTML = "";
+          latestResults.innerHTML = `<div class="empty">No rows returned.</div>`;
         }
+      }
+
+      async function requestAiSummary() {
+        if (!lastRunEnvId) {
+          latestSummary.textContent = "Run an environment before requesting a summary.";
+          return;
+        }
+        latestSummary.textContent = "Generating AI summary...";
+        const res = await fetch(`/api/environments/${lastRunEnvId}/ai-summary`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) {
+          latestSummary.textContent = data.error || "Failed to generate summary.";
+          return;
+        }
+        latestSummary.innerHTML = `
+          <strong>AI Summary</strong><br>
+          <div style="margin-top:8px;">${data.summary}</div>
+          <div style="margin-top:6px;">Decision: <strong>${data.decision}</strong> · Confidence: ${data.confidence}</div>
+        `;
       }
 
       async function refresh() {
@@ -400,6 +474,7 @@
       document.getElementById("saveEnvBtn").addEventListener("click", saveEnvironment);
       document.getElementById("resetFormBtn").addEventListener("click", resetForm);
       document.getElementById("refreshBtn").addEventListener("click", refresh);
+      document.getElementById("aiSummaryBtn").addEventListener("click", requestAiSummary);
 
       refresh();
     </script>

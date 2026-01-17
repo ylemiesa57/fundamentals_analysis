@@ -78,7 +78,8 @@ class StockScreener:
                 'status': 'FAIL',
                 'error': 'data_fetch_failed',
                 'passed_criteria': 0,
-                'failed_criteria': ['data_unavailable']
+                'failed_criteria': 'data_unavailable',
+                'total_criteria': len(self.criteria_functions),
             }
         
         # Calculate ratios
