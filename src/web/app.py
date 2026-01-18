@@ -107,6 +107,71 @@ def _generate_analysis(results_df, criteria_count: int) -> str:
     return " ".join(lines)
 
 
+def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[str, str]:
+    thesis = env.get("thesis", "").strip() or "No thesis narrative provided."
+    tickers = ", ".join(env.get("tickers") or [])
+    criteria_items = env.get("criteria") or {}
+    criteria_text = ", ".join([f"{k}={v}" for k, v in criteria_items.items()]) or "None"
+    use_defaults = env.get("use_default_criteria", True)
+    criteria_mode = "Defaults + custom" if use_defaults else "Custom only"
+
+    total = len(results_df)
+    passed = int((results_df["status"] == "PASS").sum()) if "status" in results_df.columns else 0
+    failed = total - passed
+
+    fail_reasons = []
+    if "failed_criteria" in results_df.columns:
+        fail_reasons = (
+            results_df["failed_criteria"]
+            .dropna()
+            .astype(str)
+            .str.split(", ")
+            .explode()
+            .value_counts()
+            .head(5)
+            .index
+            .tolist()
+        )
+
+    missing = []
+    if "error" in results_df.columns:
+        missing = results_df[results_df["error"] == "data_fetch_failed"]["ticker"].dropna().tolist()
+
+    ai_summary = _generate_ai_summary(env, results_df.to_dict(orient="records"))
+
+    overview = f"""
+      <p><strong>Thesis</strong>: {thesis}</p>
+      <p><strong>Tickers</strong>: {tickers or "None"}</p>
+      <p><strong>Criteria</strong>: {criteria_mode} · {criteria_text}</p>
+    """
+
+    quantitative = f"""
+      <p><strong>Pass/Fail</strong>: {passed} passed · {failed} failed · {total} total</p>
+      <p>{analysis_text}</p>
+    """
+
+    risks = "<p>No major issues detected.</p>"
+    if missing or fail_reasons:
+        parts = []
+        if missing:
+            parts.append(f"Missing data: {', '.join(missing)}.")
+        if fail_reasons:
+            parts.append("Common misses: " + "; ".join(fail_reasons) + ".")
+        risks = "<p>" + " ".join(parts) + "</p>"
+
+    decision = f"""
+      <p><strong>Decision</strong>: {ai_summary.get("decision")} · <strong>Confidence</strong>: {ai_summary.get("confidence")}</p>
+      <p>{ai_summary.get("summary")}</p>
+    """
+
+    return {
+        "overview": overview,
+        "quantitative": quantitative,
+        "risks": risks,
+        "decision": decision,
+    }
+
+
 def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[str, str]:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     base_name = f"{env['id']}_{timestamp}"
@@ -117,6 +182,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
     results_df.to_csv(csv_path, index=False)
     json_path.write_text(results_df.to_json(orient="records", indent=2))
 
+    sections = _build_report_sections(env, results_df, analysis_text)
     rows_html = "\n".join(
         [
             "<tr>" + "".join([f"<td>{value}</td>" for value in row]) + "</tr>"
@@ -147,6 +213,17 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
       border-radius: 12px;
       margin-bottom: 24px;
     }}
+    .section {{
+      margin-bottom: 20px;
+      padding: 16px;
+      background: white;
+      border-radius: 14px;
+      border: 1px solid #eee;
+    }}
+    .section h2 {{
+      margin-top: 0;
+      font-size: 1.1rem;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -168,8 +245,24 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
 </head>
 <body>
   <h1>{env['name']} Thesis Report</h1>
-  <div class="meta">Generated {datetime.now(timezone.utc).isoformat()}</div>
+  <div class="meta">Run ID {base_name} · Generated {datetime.now(timezone.utc).isoformat()}</div>
   <div class="analysis">{analysis_text}</div>
+  <div class="section">
+    <h2>Overview</h2>
+    {sections["overview"]}
+  </div>
+  <div class="section">
+    <h2>Quantitative Health</h2>
+    {sections["quantitative"]}
+  </div>
+  <div class="section">
+    <h2>Risks & Flags</h2>
+    {sections["risks"]}
+  </div>
+  <div class="section">
+    <h2>Decision Narrative</h2>
+    {sections["decision"]}
+  </div>
   <table>
     <thead><tr>{header_html}</tr></thead>
     <tbody>{rows_html}</tbody>
@@ -179,6 +272,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
     )
 
     return {
+        "run_id": base_name,
         "csv": str(csv_path),
         "json": str(json_path),
         "html": str(html_path),
@@ -381,6 +475,7 @@ def run_environment(env_id: str):
             "warnings": warnings,
             "criteria_count": len(screener.criteria_functions),
             "failed_fetch": failed_fetch_tickers,
+            "run_id": report_paths.get("run_id"),
         },
         "report_paths": report_paths,
         "results": sanitized_records,
