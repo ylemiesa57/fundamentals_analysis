@@ -83,11 +83,11 @@ def _generate_analysis(results_df, criteria_count: int) -> str:
     ]
     if criteria_count == 0:
         lines.append("No criteria were configured, so all tickers should pass by default.")
-    if avg_pe is not None:
+    if pd.notna(avg_pe):
         lines.append(f"Average P/E: {avg_pe:.2f}.")
-    if avg_roe is not None:
+    if pd.notna(avg_roe):
         lines.append(f"Average ROE: {avg_roe:.2%}.")
-    if avg_growth is not None:
+    if pd.notna(avg_growth):
         lines.append(f"Average revenue growth: {avg_growth:.2%}.")
 
     if not failed.empty:
