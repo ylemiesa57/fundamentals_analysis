@@ -251,6 +251,16 @@ class TestStockScreener(unittest.TestCase):
         self.assertEqual(len(results_df), 2)
         self.assertIn('ticker', results_df.columns)
         self.assertIn('status', results_df.columns)
+        # net_income is a real financial metric returned by screen_ticker and
+        # must not be silently pushed to the end of the column order (it was
+        # previously missing from the fixed column_order list entirely).
+        self.assertIn('net_income', results_df.columns)
+        cols = list(results_df.columns)
+        self.assertLess(
+            cols.index('net_income'), cols.index('passed_criteria'),
+            "net_income should be ordered with the other financial metrics, "
+            "not after the screening summary columns"
+        )
     
     def test_filter_by_criteria(self):
         """Test filtering DataFrame by criteria."""

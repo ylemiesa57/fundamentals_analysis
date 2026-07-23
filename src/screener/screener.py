@@ -171,7 +171,8 @@ class StockScreener:
         column_order = [
             'ticker', 'company_name', 'market_cap', 'pe_ratio',
             'current_ratio', 'debt_to_equity', 'revenue_growth', 'roe',
-            'passed_criteria', 'total_criteria', 'failed_criteria', 'status'
+            'net_income', 'passed_criteria', 'total_criteria',
+            'failed_criteria', 'status'
         ]
         
         # Add any missing columns
