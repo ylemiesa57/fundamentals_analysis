@@ -67,6 +67,18 @@ def _normalize_tickers(raw: str) -> List[str]:
     return [t.strip().upper() for t in raw.replace("\n", ",").split(",") if t.strip()]
 
 
+def _clean_str(value: Any, default: str = "") -> str:
+    """Coerce a possibly-missing/None JSON field into a stripped string.
+
+    Falls back to `default` if the value is missing, explicitly null, or
+    blank after stripping. Guards against payloads like {"name": null}
+    reaching a bare `.strip()` call and raising an AttributeError.
+    """
+    if not isinstance(value, str):
+        return default
+    return value.strip() or default
+
+
 def _generate_analysis(results_df, criteria_count: int) -> str:
     if results_df.empty:
         return "No results were returned. Check tickers and data availability."
@@ -385,8 +397,8 @@ def create_environment():
     env_id = str(uuid.uuid4())
     env = {
         "id": env_id,
-        "name": payload.get("name", "Untitled Thesis").strip() or "Untitled Thesis",
-        "thesis": payload.get("thesis", "").strip(),
+        "name": _clean_str(payload.get("name"), "Untitled Thesis"),
+        "thesis": _clean_str(payload.get("thesis")),
         "tickers": _normalize_tickers(payload.get("tickers", "")),
         "criteria": parse_inline_criteria(payload.get("criteria", "")),
         "use_default_criteria": bool(payload.get("use_default_criteria", True)),
@@ -406,8 +418,8 @@ def update_environment(env_id: str):
     if env is None:
         return jsonify({"error": "not_found"}), 404
 
-    env["name"] = payload.get("name", env.get("name")).strip() or env["name"]
-    env["thesis"] = payload.get("thesis", env.get("thesis", "")).strip()
+    env["name"] = _clean_str(payload.get("name"), env.get("name", "Untitled Thesis"))
+    env["thesis"] = _clean_str(payload.get("thesis"), env.get("thesis", ""))
     env["tickers"] = _normalize_tickers(payload.get("tickers", "")) or env.get("tickers", [])
     env["criteria"] = parse_inline_criteria(payload.get("criteria", "")) or env.get("criteria", {})
     if "use_default_criteria" in payload:
