@@ -335,9 +335,15 @@ def _generate_ai_summary(env: Dict[str, Any], results: List[Dict[str, Any]]) -> 
     pass_rate = (len(passed) / len(df)) if len(df) else 0
 
     top_failures = []
-    if "failed_criteria" in df.columns:
+    if "failed_criteria" in failed.columns:
+        # Only look at rows that actually failed. screener.py writes
+        # failed_criteria as '' (empty string, not NaN) for passing
+        # rows, so pulling this from the full df let a blank '' entry
+        # outrank real failure reasons in value_counts() whenever
+        # passes outnumbered fails -- .dropna() never touches it since
+        # it isn't NaN, only an empty string.
         top_failures = (
-            df["failed_criteria"]
+            failed["failed_criteria"]
             .dropna()
             .astype(str)
             .str.split(", ")
