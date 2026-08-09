@@ -289,6 +289,23 @@ class TestTickerFileParsing(unittest.TestCase):
             tickers = _load_tickers_from_file(Path(tmp.name))
         self.assertEqual(tickers, ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META'])
 
+    def test_comment_only_file_yields_no_tickers(self):
+        """A file with only a comment line should parse to an empty list,
+        not treat the comment text itself as a ticker.
+
+        Regression test for the single-line fallback branch skipping the
+        same comment-stripping the main per-line loop applies, which used
+        to turn "# just a comment" into the bogus ticker
+        "# JUST A COMMENT".
+        """
+        import tempfile
+        content = "# just a comment\n"
+        with tempfile.NamedTemporaryFile(mode='w+', delete=True) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            tickers = _load_tickers_from_file(Path(tmp.name))
+        self.assertEqual(tickers, [])
+
 
 if __name__ == '__main__':
     unittest.main()

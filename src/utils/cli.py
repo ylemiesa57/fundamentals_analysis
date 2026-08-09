@@ -258,5 +258,10 @@ def _load_tickers_from_file(path: Path) -> List[str]:
         tickers.extend(parts)
     # Allow a single-line, comma-separated file without newlines
     if not tickers and content.strip():
-        tickers = [t.strip() for t in content.split(',') if t.strip()]
+        # Strip a trailing comment the same way the per-line loop above
+        # does, so a comment-only file (e.g. "# just a comment") yields no
+        # tickers instead of the comment text itself being treated as one.
+        fallback_line = content.strip().split('#', 1)[0].strip()
+        if fallback_line:
+            tickers = [t.strip() for t in fallback_line.split(',') if t.strip()]
     return [t.upper() for t in tickers]
