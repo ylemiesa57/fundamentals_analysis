@@ -4,6 +4,7 @@ Minimal Flask app to manage thesis environments and run screenings.
 
 from __future__ import annotations
 
+import html
 import json
 import uuid
 from datetime import datetime, timezone
@@ -120,10 +121,20 @@ def _generate_analysis(results_df, criteria_count: int) -> str:
 
 
 def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[str, str]:
-    thesis = env.get("thesis", "").strip() or "No thesis narrative provided."
-    tickers = ", ".join(env.get("tickers") or [])
+    # Thesis/name/tickers/criteria are free-text fields the user types into
+    # the web UI, and ticker company names come from yfinance (e.g. "AT&T
+    # Inc.", "Johnson & Johnson"). None of that is safe to embed directly
+    # into the HTML report below -- an unescaped "<" or "&" corrupts the
+    # generated page, and an unescaped "<" could inject markup into a
+    # report someone else opens in a browser. Escape it all at this HTML
+    # boundary (not inside _generate_ai_summary itself, since that function
+    # is also used to build the plain-JSON /ai-summary API response).
+    thesis = html.escape(env.get("thesis", "").strip()) or "No thesis narrative provided."
+    tickers = ", ".join(html.escape(t) for t in (env.get("tickers") or []))
     criteria_items = env.get("criteria") or {}
-    criteria_text = ", ".join([f"{k}={v}" for k, v in criteria_items.items()]) or "None"
+    criteria_text = ", ".join(
+        [f"{html.escape(str(k))}={html.escape(str(v))}" for k, v in criteria_items.items()]
+    ) or "None"
     use_defaults = env.get("use_default_criteria", True)
     criteria_mode = "Defaults + custom" if use_defaults else "Custom only"
 
@@ -166,14 +177,17 @@ def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) 
     if missing or fail_reasons:
         parts = []
         if missing:
-            parts.append(f"Missing data: {', '.join(missing)}.")
+            parts.append(f"Missing data: {', '.join(html.escape(str(m)) for m in missing)}.")
         if fail_reasons:
-            parts.append("Common misses: " + "; ".join(fail_reasons) + ".")
+            parts.append("Common misses: " + "; ".join(html.escape(str(r)) for r in fail_reasons) + ".")
         risks = "<p>" + " ".join(parts) + "</p>"
 
+    decision_text = html.escape(str(ai_summary.get("decision")))
+    confidence_text = html.escape(str(ai_summary.get("confidence")))
+    summary_text = html.escape(str(ai_summary.get("summary")))
     decision = f"""
-      <p><strong>Decision</strong>: {ai_summary.get("decision")} · <strong>Confidence</strong>: {ai_summary.get("confidence")}</p>
-      <p>{ai_summary.get("summary")}</p>
+      <p><strong>Decision</strong>: {decision_text} · <strong>Confidence</strong>: {confidence_text}</p>
+      <p>{summary_text}</p>
     """
 
     return {
@@ -197,11 +211,12 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
     sections = _build_report_sections(env, results_df, analysis_text)
     rows_html = "\n".join(
         [
-            "<tr>" + "".join([f"<td>{value}</td>" for value in row]) + "</tr>"
+            "<tr>" + "".join([f"<td>{html.escape(str(value))}</td>" for value in row]) + "</tr>"
             for row in results_df.fillna("").values.tolist()
         ]
     )
-    header_html = "".join([f"<th>{col}</th>" for col in results_df.columns])
+    header_html = "".join([f"<th>{html.escape(str(col))}</th>" for col in results_df.columns])
+    env_name = html.escape(str(env['name']))
 
     html_path.write_text(
         f"""<!doctype html>
@@ -209,7 +224,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{env['name']} Report</title>
+  <title>{env_name} Report</title>
   <style>
     body {{
       font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", sans-serif;
@@ -256,7 +271,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
   </style>
 </head>
 <body>
-  <h1>{env['name']} Thesis Report</h1>
+  <h1>{env_name} Thesis Report</h1>
   <div class="meta">Run ID {base_name} · Generated {datetime.now(timezone.utc).isoformat()}</div>
   <div class="analysis">{analysis_text}</div>
   <div class="section">
