@@ -168,9 +168,10 @@ def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) 
       <p><strong>Criteria</strong>: {criteria_mode} · {criteria_text}</p>
     """
 
+    analysis_text_escaped = html.escape(analysis_text)
     quantitative = f"""
       <p><strong>Pass/Fail</strong>: {passed} passed · {failed} failed · {total} total</p>
-      <p>{analysis_text}</p>
+      <p>{analysis_text_escaped}</p>
     """
 
     risks = "<p>No major issues detected.</p>"
@@ -217,6 +218,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
     )
     header_html = "".join([f"<th>{html.escape(str(col))}</th>" for col in results_df.columns])
     env_name = html.escape(str(env['name']))
+    analysis_text_escaped = html.escape(analysis_text)
 
     html_path.write_text(
         f"""<!doctype html>
@@ -273,7 +275,7 @@ def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[s
 <body>
   <h1>{env_name} Thesis Report</h1>
   <div class="meta">Run ID {base_name} · Generated {datetime.now(timezone.utc).isoformat()}</div>
-  <div class="analysis">{analysis_text}</div>
+  <div class="analysis">{analysis_text_escaped}</div>
   <div class="section">
     <h2>Overview</h2>
     {sections["overview"]}

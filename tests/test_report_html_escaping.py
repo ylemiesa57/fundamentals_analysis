@@ -79,3 +79,44 @@ def test_company_name_and_env_name_are_escaped_in_written_html(tmp_path, monkeyp
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_text
     # A plain ampersand in a company name should also be escaped.
     assert "AT&amp;T Inc." in html_text
+
+
+def test_analysis_text_is_escaped_in_written_html(tmp_path, monkeypatch):
+    import src.web.app as app_module
+
+    monkeypatch.setattr(app_module, "REPORTS_DIR", tmp_path)
+
+    env = {
+        "id": "env-1",
+        "name": "Test Env",
+        "thesis": "",
+        "tickers": ["TEST"],
+        "criteria": {},
+        "use_default_criteria": True,
+    }
+    
+    # Create a DataFrame that will generate analysis text with special characters
+    results_df = pd.DataFrame([{
+        "ticker": "TEST",
+        "company_name": "Test Corp",
+        "status": "FAIL",
+        "failed_criteria": "<b>bad_ratio</b>",  # This also tests failed_criteria escaping in table
+        "error": None,
+        "pe_ratio": None,
+        "roe": None,
+        "revenue_growth": None,
+    }])
+    
+    # Pass analysis text that contains HTML-like content
+    analysis_text = "Pass rate: 0/1. Most misses: <script>alert(1)</script>."
+    paths = _write_report(env, results_df, analysis_text)
+    html_text = open(paths["html"]).read()
+    
+    # The unescaped script tag must never appear in the analysis div
+    assert "<script>alert(1)</script>" not in html_text
+    
+    # The escaped form should be present in the analysis div
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_text
+    
+    # Also verify the failed_criteria in the table is escaped
+    assert "&lt;b&gt;bad_ratio&lt;/b&gt;" in html_text
