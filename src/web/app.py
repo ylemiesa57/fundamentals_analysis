@@ -33,16 +33,35 @@ app = Flask(__name__, static_folder="static")
 
 @app.after_request
 def _disable_cache(response):
+    """
+        Disable caching for all responses to prevent stale content.
+        
+        Args:
+            response: Flask response object
+            
+        Returns:
+            Modified Flask response with no-cache headers
+        """
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     return response
 
 
 def _utc_now() -> str:
+    """Get the current UTC datetime as an ISO format string.
+    
+    Returns:
+        Current UTC datetime in ISO 8601 format
+    """
     return datetime.now(timezone.utc).isoformat()
 
 
 def _load_environments() -> List[Dict[str, Any]]:
+    """Load all screening environments from persistent storage.
+    
+    Returns:
+        List of environment dictionaries, or empty list if file doesn't exist
+    """
     if not ENVIRONMENTS_PATH.exists():
         return []
     try:
@@ -52,10 +71,24 @@ def _load_environments() -> List[Dict[str, Any]]:
 
 
 def _save_environments(environments: List[Dict[str, Any]]) -> None:
+    """Save screening environments to persistent storage.
+    
+    Args:
+        environments: List of environment dictionaries to persist
+    """
     ENVIRONMENTS_PATH.write_text(json.dumps(environments, indent=2))
 
 
 def _find_environment(environments: List[Dict[str, Any]], env_id: str) -> Dict[str, Any] | None:
+    """Find a screening environment by its ID.
+    
+    Args:
+        environments: List of environment dictionaries to search
+        env_id: UUID of the environment to find
+        
+    Returns:
+        Environment dictionary if found, None otherwise
+    """
     for env in environments:
         if env.get("id") == env_id:
             return env
@@ -63,6 +96,16 @@ def _find_environment(environments: List[Dict[str, Any]], env_id: str) -> Dict[s
 
 
 def _normalize_tickers(raw: str) -> List[str]:
+    """Parse and normalize a comma/newline-separated string of ticker symbols.
+    
+    Handles multiple separators, whitespace, and converts to uppercase.
+    
+    Args:
+        raw: Comma or newline-separated ticker string (e.g., "AAPL,MSFT" or "AAPL\nMSFT")
+        
+    Returns:
+        List of uppercase ticker symbols with whitespace stripped
+    """
     if not raw:
         return []
     return [t.strip().upper() for t in raw.replace("\n", ",").split(",") if t.strip()]
@@ -81,6 +124,19 @@ def _clean_str(value: Any, default: str = "") -> str:
 
 
 def _generate_analysis(results_df, criteria_count: int) -> str:
+    """Generate a text summary of screening results and metrics.
+    
+    Produces pass/fail rates, average P/E, ROE, revenue growth, and most
+    common failure reasons.
+    
+    Args:
+        results_df: DataFrame containing screening results with columns:
+                   status, pe_ratio, roe, revenue_growth, failed_criteria
+        criteria_count: Number of criteria applied in this screening
+        
+    Returns:
+        Plain text summary of results
+    """
     if results_df.empty:
         return "No results were returned. Check tickers and data availability."
 
@@ -121,6 +177,20 @@ def _generate_analysis(results_df, criteria_count: int) -> str:
 
 
 def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[str, str]:
+    """Build HTML sections for the thesis report.
+    
+    Creates Overview, Quantitative Health, Risks & Flags, and Decision
+    Narrative sections with proper HTML escaping for user-supplied data.
+    
+    Args:
+        env: Environment dictionary with name, thesis, tickers, criteria
+        results_df: DataFrame containing screening results
+        analysis_text: Plain text analysis summary
+        
+    Returns:
+        Dictionary with keys "overview", "quantitative", "risks", "decision"
+        containing formatted HTML content
+    """
     # Thesis/name/tickers/criteria are free-text fields the user types into
     # the web UI, and ticker company names come from yfinance (e.g. "AT&T
     # Inc.", "Johnson & Johnson"). None of that is safe to embed directly
@@ -200,6 +270,20 @@ def _build_report_sections(env: Dict[str, Any], results_df, analysis_text: str) 
 
 
 def _write_report(env: Dict[str, Any], results_df, analysis_text: str) -> Dict[str, str]:
+    """Write screening results to CSV, JSON, and HTML report files.
+    
+    Generates timestamped report files and stores references in the
+    environment's last_report field.
+    
+    Args:
+        env: Environment dictionary
+        results_df: DataFrame containing screening results
+        analysis_text: Plain text analysis summary
+        
+    Returns:
+        Dictionary with keys "run_id", "csv", "json", "html" pointing
+        to the generated report files
+    """
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     base_name = f"{env['id']}_{timestamp}"
     csv_path = REPORTS_DIR / f"{base_name}.csv"
@@ -399,21 +483,55 @@ def _generate_ai_summary(env: Dict[str, Any], results: List[Dict[str, Any]]) -> 
 
 @app.route("/")
 def index():
+    """
+        Serve the main single-page application HTML.
+        
+        Returns:
+            The frontend HTML file (index.html)
+        """
     return send_from_directory(app.static_folder, "index.html")
 
 
 @app.route("/<path:path>")
 def static_files(path: str):
+    """
+        Serve static files (CSS, JavaScript, images) from the static directory.
+        
+        Args:
+            path: Relative path to the static file within static/
+            
+        Returns:
+            The requested static file
+        """
     return send_from_directory(app.static_folder, path)
 
 
 @app.route("/api/environments", methods=["GET"])
 def list_environments():
+    """
+        GET /api/environments - Retrieve all screening environments.
+        
+        Returns:
+            JSON array of environment objects
+        """
     return jsonify(_load_environments())
 
 
 @app.route("/api/environments", methods=["POST"])
 def create_environment():
+    """
+        POST /api/environments - Create a new screening environment.
+        
+        Expects JSON payload with optional fields:
+        - name: Environment name (defaults to "Untitled Thesis")
+        - thesis: Investment thesis narrative
+        - tickers: Comma/newline-separated ticker symbols
+        - criteria: Inline criteria string (e.g., "pe_max=20,roe_min=0.15")
+        - use_default_criteria: Boolean to include default config criteria
+        
+        Returns:
+            JSON object of the created environment (201 Created)
+        """
     payload = request.get_json(force=True) or {}
     envs = _load_environments()
 
@@ -435,6 +553,20 @@ def create_environment():
 
 @app.route("/api/environments/<env_id>", methods=["PUT"])
 def update_environment(env_id: str):
+    """
+        PUT /api/environments/<env_id> - Update a screening environment.
+        
+        Updates the environment with provided fields; missing fields retain
+        their existing values.
+        
+        Args:
+            env_id: UUID of the environment to update
+            
+        Expects JSON payload with optional fields (same as create_environment)
+        
+        Returns:
+            JSON object of the updated environment, or 404 if not found
+        """
     payload = request.get_json(force=True) or {}
     envs = _load_environments()
     env = _find_environment(envs, env_id)
@@ -454,6 +586,15 @@ def update_environment(env_id: str):
 
 @app.route("/api/environments/<env_id>", methods=["DELETE"])
 def delete_environment(env_id: str):
+    """
+        DELETE /api/environments/<env_id> - Delete a screening environment.
+        
+        Args:
+            env_id: UUID of the environment to delete
+            
+        Returns:
+            JSON object with status "deleted", or 404 if not found
+        """
     envs = _load_environments()
     env = _find_environment(envs, env_id)
     if env is None:
@@ -465,6 +606,19 @@ def delete_environment(env_id: str):
 
 @app.route("/api/environments/<env_id>/run", methods=["POST"])
 def run_environment(env_id: str):
+    """
+        POST /api/environments/<env_id>/run - Execute screening for an environment.
+        
+        Fetches financial data for configured tickers, applies criteria,
+        and generates CSV/JSON/HTML reports.
+        
+        Args:
+            env_id: UUID of the environment to run
+            
+        Returns:
+            JSON object with environment, summary, report_paths, and results,
+            or 404/400 if environment not found or has no tickers
+        """
     envs = _load_environments()
     env = _find_environment(envs, env_id)
     if env is None:
@@ -520,6 +674,19 @@ def run_environment(env_id: str):
 
 @app.route("/api/environments/<env_id>/ai-summary", methods=["POST"])
 def ai_summary(env_id: str):
+    """
+        POST /api/environments/<env_id>/ai-summary - Get decision summary for last run.
+        
+        Loads results from the last screening run and generates a deterministic
+        decision (PROCEED/HOLD/PAUSE) with confidence level.
+        
+        Args:
+            env_id: UUID of the environment
+            
+        Returns:
+            JSON object with keys "summary", "decision", "confidence",
+            or 404 if environment not found
+        """
     envs = _load_environments()
     env = _find_environment(envs, env_id)
     if env is None:
@@ -531,6 +698,13 @@ def ai_summary(env_id: str):
 
 
 def run(host: str = "127.0.0.1", port: int = 5000, debug: bool = False) -> None:
+    """Start the Flask development server.
+    
+    Args:
+        host: Host to bind to (default 127.0.0.1)
+        port: Port to bind to (default 5000)
+        debug: Whether to run in debug mode (default False)
+    """
     app.run(host=host, port=port, debug=debug)
 
 
